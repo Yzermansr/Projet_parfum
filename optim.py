@@ -3,7 +3,25 @@ import torch.optim as optim
 from torch.autograd.functional import hessian
 import numpy as np
 from scipy.optimize import linprog
+from sklearn.decomposition import PCA
 
+def compute_principal_axes(A, b):
+    """
+    Trouve les directions principales du polyèdre en utilisant l'Analyse en Composantes Principales (PCA).
+    """
+    # Générer des points à l'intérieur du polyèdre
+    points = []
+    for _ in range(5000):  # Échantillonnage
+        x = np.random.uniform(-2, 2, size=(2,))
+        if np.all(A @ x <= b):
+            points.append(x)
+
+    points = np.array(points)
+
+    # Appliquer PCA pour obtenir les directions principales
+    pca = PCA(n_components=2)
+    pca.fit(points)
+    return pca.mean_, pca.components_, pca.explained_variance_
 
 def find_interior_point(A, b):
     """
