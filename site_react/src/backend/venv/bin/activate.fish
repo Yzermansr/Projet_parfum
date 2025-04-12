@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/yzermans/Documents/site_react/Projet_parfum/site_react/src/backend/venv
+set -gx VIRTUAL_ENV /home/yzermans/Projet_parfum/site_react/src/backend/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH
