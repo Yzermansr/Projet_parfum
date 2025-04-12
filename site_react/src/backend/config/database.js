@@ -2,6 +2,7 @@ import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
 export const initDB = async () => {
+  const dbComparaison = await open({ filename: "./comparaison.db", driver: sqlite3.Database })
   const dbParfums = await open({ filename: "./parfums.db", driver: sqlite3.Database });
   const dbNotes = await open({ filename: "./notes.db", driver: sqlite3.Database });
   const dbUtilisateur = await open({ filename: "./Utilisateur.db", driver: sqlite3.Database });
@@ -21,6 +22,14 @@ export const initDB = async () => {
       Mot_de_passe TEXT NOT NULL
     )
   `);
+  
+  await dbComparaison.exec(`
+    CREATE TABLE IF NOT EXISTS Comparaison (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      parfum1 TEXT NOT NULL,
+      parfum2 TEXT NOT NULL
+    )
+  `);
 
-  return { dbParfums, dbNotes, dbUtilisateur };
+  return { dbParfums, dbNotes, dbUtilisateur, dbComparaison };
 };

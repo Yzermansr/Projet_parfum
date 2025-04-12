@@ -50,6 +50,7 @@ function Home() {
   return (
     
     <div style={{ maxWidth: "1000px", margin: "auto", textAlign: "center" }}>
+      <button onClick={() => navigate("/Test")}>Quiz</button>
       <div style={{ alignSelf: "flex-start", padding: "10px" }}>
           {pseudo && <p>Connecté en tant que : <strong>{pseudo}</strong></p>}
           <button onClick={() => navigate("/")}>Se Deconnecter</button>
