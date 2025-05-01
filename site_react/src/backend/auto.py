@@ -69,6 +69,11 @@ def generate_constraints(comparisons, n = 1995, epsilon=1e-2):
         b.append(-epsilon)
     return np.array(A), np.array(b)
 
+def get_preference_matrix(username: str):
+    comparisons = get_data2(username)
+    A, b = generate_constraints(comparisons)
+    return A, b
+
 A_full, b_full = generate_constraints(comparisons)
 print(A_full)
 print(b_full)
