@@ -23,7 +23,7 @@ def compute_principal_axes(A, b):
     pca.fit(points)
     return pca.mean_, pca.components_, pca.explained_variance_
 
-def find_interior_point(A, b):
+def find_interior_point(A, b, tensor: bool = False):
     """
     Find an interior point of a polyhedron Ax <= b using SciPy's linear programming solver.
 
@@ -45,7 +45,8 @@ def find_interior_point(A, b):
     else:
         b_np = np.array(b)
 
-    n_dim = A_np.shape[1]  # Number of dimensions
+    n_dim = A_np.shape[1] 
+     # Number of dimensions
 
     # Set up the LP: max s subject to Ax + s*1 <= b
     # Reformat as standard form for linprog: min c^T x subject to A_ub x <= b_ub
@@ -60,6 +61,8 @@ def find_interior_point(A, b):
     # Solve the LP
     result = linprog(c, A_ub=A_aug, b_ub=b_np, method='highs')
 
+    print(result)
+
     if not result.success:
         raise ValueError(f"Failed to find an interior point: {result.message}")
 
@@ -72,7 +75,9 @@ def find_interior_point(A, b):
         raise ValueError("Could not find an interior point. The polyhedron might be empty or degenerate.")
 
     # Convert back to torch tensor
-    return torch.tensor(x_sol, dtype=torch.float32)
+    if tensor:
+        return torch.tensor(x_sol, dtype=torch.float32)
+    return x_sol
 
 def barrier_function(x, A, b):
     """
@@ -89,7 +94,7 @@ def barrier_function(x, A, b):
     return -torch.sum(torch.log(b - A @ x))
 
 
-def find_analytic_center(A, b, max_iter=1000, lr=0.1, verbose=True):
+def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
     """
     Find the analytic center of a polyhedron using barrier method.
 
@@ -105,27 +110,28 @@ def find_analytic_center(A, b, max_iter=1000, lr=0.1, verbose=True):
     """
 
     # Initialize x inside the polyhedron
-    x = torch.tensor(find_interior_point(A, b), requires_grad=True)
+    x = find_interior_point(A, b)
 
     # Verify initial point is feasible
     margin = b - A @ x
+    margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
 
     # Setup optimizer
-    optimizer = optim.SGD([x], lr=lr)
+    optimizer = optim.SGD([torch.tensor(x)], lr=lr)
 
     # Optimization loop
     for i in range(max_iter):
         optimizer.zero_grad() # reset gradient
-        loss = barrier_function(x, A, b)
+        loss = barrier_function(torch.tensor(x, requires_grad = True), torch.tensor(A, requires_grad = True), torch.tensor(b, requires_grad = True)) # compute loss
         loss.backward()
         optimizer.step() # step of gradient descent
 
         # Print progress periodically
         if verbose and i % 100 == 0:
-            print(f"Iteration {i}: x = {x.detach().numpy()}, loss = {loss.item():.4f}")
+            print(f"Iteration {i}: x = {x}, loss = {loss.item():.4f}")
 
-    return x.detach() # detaching the tensor from current graph
+    return x # detaching the tensor from current graph
 
 def get_ellipsis_data(hessian, center:torch.Tensor):
     """
@@ -139,32 +145,22 @@ def get_ellipsis_data(hessian, center:torch.Tensor):
          eigenvalues as two float, eigenvectors as two numpy arrays, center as a numpy array
     """
 
-    Hx = hessian[0][0]
-
+    Hx = hessian
+    
+    
     # Calcul des valeurs propres
     eigenvalues, eigenvectors = torch.linalg.eig(Hx)
-    lambda1 = torch.real(eigenvalues[0]).item()
-    lambda2 = torch.real(eigenvalues[1]).item()
 
-    id_grand_axe = 0
-    if lambda2 < lambda1:
-        id_grand_axe = 1
-
-    v1 = torch.real(eigenvectors[id_grand_axe])
-    v2 = torch.real(eigenvectors[1 - id_grand_axe])
-    l1 = torch.real(eigenvalues[id_grand_axe]).item()
-    l2 = torch.real(eigenvalues[1 - id_grand_axe]).item()
-
-    return l1, l2, v1.numpy(), v2.numpy(), center.numpy()
+    return eigenvalues, eigenvectors.numpy(), center
 
 def get_pref_data(A, b):
     # center
     center = find_analytic_center(A, b)
 
     # hessian
-    h = hessian(barrier_function, (center, A, b))
+    h = hessian(barrier_function, (torch.tensor(center), torch.tensor(A), torch.tensor(b)))
     Hx = h[0][0]
     h_inv = torch.linalg.inv(Hx)
-    _, _, eigv1, eigv2, _ = get_ellipsis_data(h_inv, center)
-    return center, eigv1
+    _, eigv, _ = get_ellipsis_data(h_inv, center)
+    return center, eigv
 

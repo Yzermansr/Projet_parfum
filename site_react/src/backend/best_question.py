@@ -1,8 +1,10 @@
 import numpy as np
 from optim import compute_principal_axes
+from auto import get_data2
+from auto import get_preference_matrix2
 
 
-def fitness(ellipsis_axis, center, vector) -> (int, int):
+def fitness(ellipsis_axis, center, vector) -> tuple[int, int]:
     """
     Calculates two fitness scores between the vector and the axis of the Sonnevend ellipsis.
 
@@ -30,13 +32,13 @@ def fitness(ellipsis_axis, center, vector) -> (int, int):
     # make unit vectors
     v1 = vector/np.linalg.norm(vector)
     min_scal = 100
-    for i in range(ellipsis_axis.shape[0]):
-        unit = ellipsis_axis[0]/np.linalg.norm(ellipsis_axis[0])
-        scal = np.dot(v1, unit)
+    for axis in ellipsis_axis:
+        unit = axis/np.linalg.norm(axis)
+        scal = np.dot(v1, unit) 
         if scal < min_scal:
             min_scal = scal
 
-    return distance, 2*np.abs(scal-0.5)
+    return distance, 2*np.abs(min_scal-0.5)
 
 def get_best_question(ellipsis_axis, center):
     """
@@ -50,4 +52,34 @@ def get_best_question(ellipsis_axis, center):
             numpy.ndarray : the best question as a vector
         """
     # parcourir toutes les questions possibles et trouver celle avec le meilleur score de fitness
-    return "au top"
+    d = center.shape
+    best_vector = None
+    best_score = 10000000
+
+
+    A,B =  get_preference_matrix2('yzermans')
+    l,c = A.shape
+    for i in range(l):
+        dist_score, col_score = fitness(ellipsis_axis, center,A[i,:])
+        total_score = dist_score + col_score
+        print(f"score de {i} : {total_score}")
+        if total_score < best_score :
+            best_score = total_score
+            best_vector = i
+    n = 0
+    for j in A[best_vector,:]:
+        n = n + 1
+        if (j == 1):
+            value1 = n
+        if(j == -1):
+            value2 = n
+    n = 0
+    for j in A[25,:]:
+        n = n + 1
+        if (j == 1):
+            print(n)
+        if(j == -1):
+            print(n)
+
+    return best_vector, value1, value2 
+        
