@@ -1,165 +1,118 @@
-import numpy as np
 import sqlite3
+import numpy as np
 
-DB = 'comparaison.db'
-DB2 = 'notes.db'
-DB1 = 'parfums_numerotes.db'
 
-def get_data():
-    conn = sqlite3.connect(DB)
+def check_ingredients_unicity() -> None:
+    """
+    Prints the perfumes where an ingredient is present in more than one note.
+
+    Returns:
+        None
+    """
+    conn = sqlite3.connect("database")
     c = conn.cursor()
-    c.execute('SELECT * FROM comparaison')
+    c.execute("""SELECT Id,
+                        Tete,
+                        Coeur,
+                        Fond
+                 FROM parfums_numerotes;""")
     data = c.fetchall()
     conn.close()
-    comparaison = []
-    n = 0
-    x = []
-    for row in data:
-        n = n + 1
-        comparaison.append((
-            int(row[1]),
-            int(row[2]),
-        ))
-        if row[1] not in x:
-            x.append(row[1])
-        if row[2] not in x :
-            x.append(row[2])
-    print(x)
-    comparaison2 = []
-    for j in range (len(x)):
-        for i in range(1,1995):
-            if ( i != x[j] ):
-                comparaison2.append((i,x[j]))
-                comparaison.append((x[j],i))
-   
-    comparaison3 = []
-    for j in range(len(x)):
-        for i in range(len(x)):
-            if ( x[i] != x[j] ):
-                comparaison3.append((x[i],x[j]))   
-                comparaison3.append((x[j],x[i]))  
- 
-    return  comparaison2,n,comparaison3
+
+    for id, t, c, f in data:
+        t_list = set(map(lambda x: int(x), t.split(',')))
+        c_list = set(map(lambda x: int(x), c.split(',')))
+        f_list = set(map(lambda x: int(x), f.split(',')))
+
+        if len(t_list & c_list & f_list) != 0:
+            print(id)
 
 
-def get_data2(pseudo):
-    conn = sqlite3.connect(DB2)
+def generate_W():
+    """
+    Generates the constraint matrix `W`, constraint vector `b`, and perfume matrix `P` used in
+    the recommendation algorithm.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        A tuple containing:
+        - W: The constraint matrix with shape (l, 327) where `l` is the number of comparisons.
+        - b: A vector of constraint values, initialized to 0.01 for each comparison.
+        - P: A matrix of vectorized perfumes with shape (m, 327) where `m` is the number of perfumes.
+    """
+    conn = sqlite3.connect("database")
     c = conn.cursor()
-    c.execute('SELECT * FROM notes where pseudo = (?) order by note desc', (pseudo,))
+    c.execute("""SELECT p1.Id    AS parfum1_id,
+                        p1.Tete  AS parfum1_tete,
+                        p1.Coeur AS parfum1_coeur,
+                        p1.Fond  AS parfum1_fond,
+                        p2.Id    AS parfum2_id,
+                        p2.Tete  AS parfum2_tete,
+                        p2.Coeur AS parfum2_coeur,
+                        p2.Fond  AS parfum2_fond
+                 FROM Comparaison c
+                          JOIN parfums_numerotes p1 ON c.parfum1 = p1.id
+                          JOIN parfums_numerotes p2 ON c.parfum2 = p2.id;""")
     data = c.fetchall()
     conn.close()
-    comparaison = []
-    n = len(data)
-    conn = sqlite3.connect(DB1)
-    c = conn.cursor()
-    x = []
-    for row in data:
-        c.execute('SELECT id FROM parfums_numerotes where Nom = (?)', (row[1],))
-        data = c.fetchall()
-        comparaison.append((
-            int(data[0][0]),
-            int(row[2]),
-        ))
-        if data[0][0] not in x:
-            x.append(data[0][0])
-        if row[2] not in x :
-            x.append(row[2])
-    conn.close()
-    comparaison2 = []
-    for i in range(len(comparaison)):
-        nom = comparaison[i][0]
-        note = comparaison[i][1]
-        for j in range(len(comparaison) - 1,i,-1):
-            if (comparaison[j][1] < note):
-                comparaison2.append((
-                int(nom),
-                int(comparaison[j][0]),
-        ))
-    print(x)
-    return  comparaison2
+
+    # building the constraint matrix W
+    # dimensions: l×327
+    W = []
+    P = []
+    for _, t1, c1, f1, _, t2, c2, f2 in data:
+        x = generate_P(t1, c1, f1)
+        y = generate_P(t2, c2, f2)
+        if not any(np.array_equal(x, p) for p in P):
+            P.append(x)
+        if not any(np.array_equal(y, p) for p in P):
+            P.append(y)
+        W.append(x - y)
+    # print(W[:5])
+
+    # building b
+    W = np.array(W)
+    b = np.array([10e-2 for _ in range(W.shape[0])])
+
+    return W, b, np.array(P)
 
 
+def generate_P(t: str, c: str, f: str) -> np.ndarray:
+    """
+    Generates an array representing the presence of ingredients in a perfume. Each string contains a series of
+    comma-separated integers that are parsed, aggregated, and tallied into a
+    frequency count stored in a predefined array `p` of size 327.
 
+    Parameters
+    ----------
+    t : str
+        A string containing comma-separated integers, representing the ingredients
+        of the "Tête" note.
+    c : str
+        A string containing comma-separated integers, representing the ingredients
+        of the "Coeur" note.
+    f : str
+        A string containing comma-separated integers, representing the ingredients
+        of the "Fond" note.
 
+    Returns
+    -------
+    np.ndarray
+        A NumPy array of size 327 with counts of ingredient appearances.
+        Each index corresponds to a specific ingredient, and the
+        value at that index represents its frequency.
+    """
+    p = np.zeros(327)
 
+    # extract the numbers from the strings
+    t_list = list(map(lambda x: int(x), t.split(',')))
+    c_list = list(map(lambda x: int(x), c.split(',')))
+    f_list = list(map(lambda x: int(x), f.split(',')))
+    ingredients = t_list + c_list + f_list
 
+    # building P
+    for i in ingredients:
+        p[i] += 1
 
-def generate_constraints2(comparisons, n=1995, epsilon=1e-2, bounds=True):
-    A = []
-    b = []
-    for i, j in comparisons:
-        a = np.zeros(n)
-        a[i] = -1
-        a[j] = 1
-        A.append(a)
-        b.append(-epsilon)
-
-    if bounds:
-        M = 10  
-        for i in range(n):
-            upper = np.zeros(n)
-            upper[i] = 1
-            A.append(upper)
-            b.append(M)
-            
-            lower = np.zeros(n)
-            lower[i] = -1
-            A.append(lower)
-            b.append(M)
-
-    return np.array(A), np.array(b)
-
-
-def get_preference_matrix(username: str):
-    comparaisons = [(0,1),(1,2),(3,1),(4,3),(4,1)]
-    x = []
-    for (i,j) in comparaisons:
-        if i not in x :
-            x.append(i)
-        if j not in x :
-            x.append(j)
-    test = []
-    for j in range(len(x)):
-        for i in range(len(x)):
-            if ( x[i] != x[j] ):
-                test.append((x[i],x[j]))   
-                test.append((x[j],x[i])) 
-    A2,b2 = generate_constraints2(test,n=5,epsilon=1e-2)
-    A, b = generate_constraints2(comparaisons, n = 5, epsilon=1e-2)
-    print(A)
-    print(b)    
-    return A, b
-
-
-def generate_constraints(comparisons, n=1995, epsilon=1e-2, bounds=True):
-    A = []
-    b = []
-    for i, j in comparisons:
-        a = np.zeros(n)
-        a[i] = -1
-        a[j] = 1
-        A.append(a)
-        b.append(-epsilon)
-    return np.array(A),np.array(b)
-
-def get_preference_matrix2(username: str):
-    comparaisons = [(0,1),(1,2),(3,1),(4,3),(1,4)]
-    x = []
-    for (i,j) in comparaisons:
-        if i not in x :
-            x.append(i)
-        if j not in x :
-            x.append(j)
-    test = []
-    for j in range(len(x)):
-        for i in range(len(x)):
-            if ( x[i] != x[j] ):
-                test.append((x[i],x[j]))   
-                test.append((x[j],x[i])) 
-
-    A2,b2 = generate_constraints(test,n=5,epsilon=1e-2)
-    A, b = generate_constraints2(comparaisons, n = 5, epsilon=1e-2)
-    print(A2)
-    print(b2)    
-    return A2,b2
-
+    return p

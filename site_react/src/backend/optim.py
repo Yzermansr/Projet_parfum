@@ -4,6 +4,7 @@ from torch.autograd.functional import hessian
 import numpy as np
 from scipy.optimize import linprog
 from sklearn.decomposition import PCA
+from itertools import combinations
 
 def compute_principal_axes(A, b):
     """
@@ -34,6 +35,7 @@ def find_interior_point(A, b, tensor: bool = False):
     Returns:
         torch.Tensor: A point strictly inside the polyhedron
     """
+    print("Finding a point inside the polytope...")
     # Convert to numpy arrays if needed
     if isinstance(A, torch.Tensor):
         A_np = A.detach().numpy()
@@ -59,9 +61,8 @@ def find_interior_point(A, b, tensor: bool = False):
     A_aug = np.hstack([A_np, np.ones((A_np.shape[0], 1))])
 
     # Solve the LP
+    print(f"b : {b_np.shape}, {A.shape}")
     result = linprog(c, A_ub=A_aug, b_ub=b_np, method='highs')
-
-    print(result)
 
     if not result.success:
         raise ValueError(f"Failed to find an interior point: {result.message}")
@@ -74,6 +75,7 @@ def find_interior_point(A, b, tensor: bool = False):
     if s_opt <= 0:
         raise ValueError("Could not find an interior point. The polyhedron might be empty or degenerate.")
 
+    print("Interior point found !")
     # Convert back to torch tensor
     if tensor:
         return torch.tensor(x_sol, dtype=torch.float32)
@@ -112,7 +114,8 @@ def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
     # Initialize x inside the polyhedron
     x = find_interior_point(A, b)
 
-    # Verify initial point is feasible
+    print("Finding analytic center of the polytope...")
+    # Verify the initial point is feasible
     margin = b - A @ x
     margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
@@ -131,7 +134,8 @@ def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
         if verbose and i % 100 == 0:
             print(f"Iteration {i}: x = {x}, loss = {loss.item():.4f}")
 
-    return x # detaching the tensor from current graph
+    print("Center found !")
+    return x # detaching the tensor from the current graph
 
 def get_ellipsis_data(hessian, center:torch.Tensor):
     """
@@ -144,13 +148,13 @@ def get_ellipsis_data(hessian, center:torch.Tensor):
     Returns:
          eigenvalues as two float, eigenvectors as two numpy arrays, center as a numpy array
     """
-
+    print("Computing ellipsis data...")
     Hx = hessian
     
     
     # Calcul des valeurs propres
     eigenvalues, eigenvectors = torch.linalg.eig(Hx)
-
+    print("Ellipsis computed !")
     return eigenvalues, eigenvectors.numpy(), center
 
 def get_pref_data(A, b):
@@ -158,8 +162,37 @@ def get_pref_data(A, b):
     center = find_analytic_center(A, b)
 
     # hessian
+    print("Computing hessian...")
+    x = torch.tensor(center, dtype=torch.float32)
+    A_t = torch.tensor(A, dtype=torch.float32)
+    b_t = torch.tensor(b, dtype=torch.float32)
+
+    # Calcul de la Hessienne analytique H = Aᵀ D A
+    r = 1.0 / (b_t - A_t @ x)
+    D = torch.diag(r ** 2)
+    H = A_t.T @ D @ A_t
+
+    # Forcer la symétrie
+    H = 0.5 * (H + H.T)
+
+    # Régulariser pour éviter les problèmes d'instabilité numérique
+    epsilon = 1e-6
+    H += epsilon * torch.eye(H.shape[0])
+
+    # Décomposition spectrale
+    eigvals, eigvecs = torch.linalg.eigh(H)
+    print("Hessian computed !")
+    return center, eigvecs
+
+def get_pref_data_2(A, b):
+    # center
+    center = find_analytic_center(A, b)
+
+    # hessian
+    print("Computing hessian...")
     h = hessian(barrier_function, (torch.tensor(center), torch.tensor(A), torch.tensor(b)))
     Hx = h[0][0]
+    print("Inverting hessian...")
     h_inv = torch.linalg.inv(Hx)
     _, eigv, _ = get_ellipsis_data(h_inv, center)
     return center, eigv
