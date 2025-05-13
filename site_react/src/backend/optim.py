@@ -6,25 +6,45 @@ from scipy.optimize import linprog
 from sklearn.decomposition import PCA
 from itertools import combinations
 
-def compute_principal_axes(A, b):
+
+def compute_principal_axes(W, b, n_points=5000):
     """
-    Trouve les directions principales du polyèdre en utilisant l'Analyse en Composantes Principales (PCA).
+    Trouve toutes les directions principales du polyèdre défini par Ax <= b
+    en utilisant une Analyse en Composantes Principales (PCA).
+
+    Args:
+        A (np.ndarray): Matrice des contraintes (m x d)
+        b (np.ndarray): Vecteur des bornes (m,)
+        n_points (int): Nombre de points à échantillonner à l'intérieur du polyèdre
+
+    Returns:
+        tuple:
+            - mean (np.ndarray): le centroïde des points échantillonnés
+            - components (np.ndarray): vecteurs propres (axes principaux) de dimension (d x d)
+            - explained_variance (np.ndarray): variances expliquées par chaque axe
     """
-    # Générer des points à l'intérieur du polyèdre
+    d = W.shape[1]
     points = []
-    for _ in range(5000):  # Échantillonnage
-        x = np.random.uniform(-2, 2, size=(2,))
-        if np.all(A @ x <= b):
+
+    for _ in range(n_points * 10):  # plus de tentatives pour compenser la faible densité en haute dimension
+        x = np.random.uniform(-1, 1, size=d)
+        if np.all(W @ x <= b):
             points.append(x)
+            if len(points) >= n_points:
+                break
+
+    if len(points) < max(10, d):
+        raise ValueError(f"Seulement {len(points)} points trouvés dans le polyèdre, PCA impossible.")
 
     points = np.array(points)
 
-    # Appliquer PCA pour obtenir les directions principales
-    pca = PCA(n_components=2)
+    # PCA sur toutes les composantes (complet)
+    pca = PCA(n_components=d)
     pca.fit(points)
+
     return pca.mean_, pca.components_, pca.explained_variance_
 
-def find_interior_point(A, b, tensor: bool = False):
+def find_interior_point(W, b, tensor: bool = False):
     """
     Find an interior point of a polyhedron Ax <= b using SciPy's linear programming solver.
 
@@ -37,17 +57,17 @@ def find_interior_point(A, b, tensor: bool = False):
     """
     print("Finding a point inside the polytope...")
     # Convert to numpy arrays if needed
-    if isinstance(A, torch.Tensor):
-        A_np = A.detach().numpy()
+    if isinstance(W, torch.Tensor):
+        W_np = W.detach().numpy()
     else:
-        A_np = np.array(A)
+        W_np = np.array(W)
 
     if isinstance(b, torch.Tensor):
         b_np = b.detach().numpy()
     else:
         b_np = np.array(b)
 
-    n_dim = A_np.shape[1] 
+    n_dim = W_np.shape[1]
      # Number of dimensions
 
     # Set up the LP: max s subject to Ax + s*1 <= b
@@ -58,11 +78,11 @@ def find_interior_point(A, b, tensor: bool = False):
     c[-1] = -1.0  # The objective is to maximize s
 
     # Augment A with column of ones (for s)
-    A_aug = np.hstack([A_np, np.ones((A_np.shape[0], 1))])
+    W_aug = np.hstack([W_np, np.ones((W_np.shape[0], 1))])
 
     # Solve the LP
-    print(f"b : {b_np.shape}, {A.shape}")
-    result = linprog(c, A_ub=A_aug, b_ub=b_np, method='highs')
+    print(f"b : {b_np.shape}, {W.shape}")
+    result = linprog(c, A_ub=W_aug, b_ub=b_np, method='highs')
 
     if not result.success:
         raise ValueError(f"Failed to find an interior point: {result.message}")
@@ -81,7 +101,7 @@ def find_interior_point(A, b, tensor: bool = False):
         return torch.tensor(x_sol, dtype=torch.float32)
     return x_sol
 
-def barrier_function(x, A, b):
+def barrier_function(x, W, b):
     """
     Logarithmic barrier function for the polyhedron Ax <= b.
 
@@ -93,10 +113,10 @@ def barrier_function(x, A, b):
     Returns:
         torch.Tensor: Value of the barrier function
     """
-    return -torch.sum(torch.log(b - A @ x))
+    return -torch.sum(torch.log(b - W @ x))
 
 
-def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
+def find_analytic_center(W, b, max_iter=500, lr=0.1, verbose=True):
     """
     Find the analytic center of a polyhedron using barrier method.
 
@@ -112,11 +132,11 @@ def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
     """
 
     # Initialize x inside the polyhedron
-    x = find_interior_point(A, b)
+    x = find_interior_point(W, b)
 
     print("Finding analytic center of the polytope...")
     # Verify the initial point is feasible
-    margin = b - A @ x
+    margin = b - W @ x
     margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
 
@@ -126,7 +146,7 @@ def find_analytic_center(A, b, max_iter=500, lr=0.1, verbose=True):
     # Optimization loop
     for i in range(max_iter):
         optimizer.zero_grad() # reset gradient
-        loss = barrier_function(torch.tensor(x, requires_grad = True), torch.tensor(A, requires_grad = True), torch.tensor(b, requires_grad = True)) # compute loss
+        loss = barrier_function(torch.tensor(x, requires_grad = True), torch.tensor(W, requires_grad = True), torch.tensor(b, requires_grad = True)) # compute loss
         loss.backward()
         optimizer.step() # step of gradient descent
 
@@ -157,20 +177,20 @@ def get_ellipsis_data(hessian, center:torch.Tensor):
     print("Ellipsis computed !")
     return eigenvalues, eigenvectors.numpy(), center
 
-def get_pref_data(A, b):
+def get_pref_data(W, b):
     # center
-    center = find_analytic_center(A, b)
+    center = find_analytic_center(W, b)
 
     # hessian
     print("Computing hessian...")
     x = torch.tensor(center, dtype=torch.float32)
-    A_t = torch.tensor(A, dtype=torch.float32)
+    W_t = torch.tensor(W, dtype=torch.float32)
     b_t = torch.tensor(b, dtype=torch.float32)
 
     # Calcul de la Hessienne analytique H = Aᵀ D A
-    r = 1.0 / (b_t - A_t @ x)
+    r = 1.0 / (b_t - W_t @ x)
     D = torch.diag(r ** 2)
-    H = A_t.T @ D @ A_t
+    H = W_t.T @ D @ W_t
 
     # Forcer la symétrie
     H = 0.5 * (H + H.T)
@@ -184,13 +204,13 @@ def get_pref_data(A, b):
     print("Hessian computed !")
     return center, eigvecs
 
-def get_pref_data_2(A, b):
+def get_pref_data_2(W, b):
     # center
-    center = find_analytic_center(A, b)
+    center = find_analytic_center(W, b)
 
     # hessian
     print("Computing hessian...")
-    h = hessian(barrier_function, (torch.tensor(center), torch.tensor(A), torch.tensor(b)))
+    h = hessian(barrier_function, (torch.tensor(center), torch.tensor(W), torch.tensor(b)))
     Hx = h[0][0]
     print("Inverting hessian...")
     h_inv = torch.linalg.inv(Hx)

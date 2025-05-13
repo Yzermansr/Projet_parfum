@@ -3,7 +3,7 @@ import numpy as np
 from optim import barrier_function, find_analytic_center
 from itertools import combinations
 
-def hessian_vector_product(f, x, v, A, b, eps=1e-4):
+def hessian_vector_product(f, x, v, W, b, eps=1e-4):
     """
     Approximate the Hessian-vector product H(x) @ v using finite differences:
     H(x) @ v ≈ (∇f(x + εv) - ∇f(x)) / ε
@@ -12,17 +12,17 @@ def hessian_vector_product(f, x, v, A, b, eps=1e-4):
         x = torch.tensor(x, dtype=torch.float32)
 
     x = x.detach().clone().requires_grad_(True)
-    f_x = f(x, A, b)
+    f_x = f(x, W, b)
     grad_f = torch.autograd.grad(f_x, x, create_graph=False)[0]
 
     x_eps = (x + eps * v).detach().clone().requires_grad_(True)
-    f_x_eps = f(x_eps, A, b)
+    f_x_eps = f(x_eps, W, b)
     grad_f_eps = torch.autograd.grad(f_x_eps, x_eps, create_graph=False)[0]
 
     return (grad_f_eps - grad_f) / eps
 
 
-def power_iteration_hvp(f, x, A, b, num_iter=50):
+def power_iteration_hvp(f, x, W, b, num_iter=50):
     """
     Approximate the dominant eigenvector of the Hessian using power iteration.
     """
@@ -31,20 +31,20 @@ def power_iteration_hvp(f, x, A, b, num_iter=50):
     v = v / v.norm()
 
     for _ in range(num_iter):
-        Hv = hessian_vector_product(f, x, v, A, b)
+        Hv = hessian_vector_product(f, x, v, W, b)
         v = Hv / Hv.norm()
 
     return v
 
 
-def d_criterion_best_question_power(A, b, known_pairs=None):
-    center = find_analytic_center(A, b, verbose=False)
-    A_tensor = torch.tensor(A, dtype=torch.float32)
+def d_criterion_best_question_power(W, b, known_pairs=None):
+    center = find_analytic_center(W.get_matrix(), b, verbose=False)
+    W_tensor = torch.tensor(W.get_matrix(), dtype=torch.float32)
     b_tensor = torch.tensor(b, dtype=torch.float32)
 
-    v_max = power_iteration_hvp(barrier_function, center, A_tensor, b_tensor).numpy()
+    v_max = power_iteration_hvp(barrier_function, center, W_tensor, b_tensor).numpy()
 
-    d = A.shape[1]
+    d = W.get_matrix().shape[1]
     best_score = -1
     best_pair = None
     if known_pairs is None:
@@ -61,5 +61,6 @@ def d_criterion_best_question_power(A, b, known_pairs=None):
         if alignment > best_score:
             best_score = alignment
             best_pair = (i, j)
+        known_pairs.add((i, j))
 
     return best_pair, best_score
