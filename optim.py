@@ -7,34 +7,37 @@ from sklearn.decomposition import PCA
 
 def compute_principal_axes(A, b, n_points=5000):
     """
-    Trouve les directions principales du polyèdre défini par Ax <= b 
-    en utilisant l'Analyse en Composantes Principales (PCA).
+    Trouve toutes les directions principales du polyèdre défini par Ax <= b
+    en utilisant une Analyse en Composantes Principales (PCA).
 
     Args:
         A (np.ndarray): Matrice des contraintes (m x d)
         b (np.ndarray): Vecteur des bornes (m,)
-        n_points (int): Nombre de points à échantillonner
+        n_points (int): Nombre de points à échantillonner à l'intérieur du polyèdre
 
     Returns:
-        tuple: centroïde, composantes principales, variances expliquées
+        tuple:
+            - mean (np.ndarray): le centroïde des points échantillonnés
+            - components (np.ndarray): vecteurs propres (axes principaux) de dimension (d x d)
+            - explained_variance (np.ndarray): variances expliquées par chaque axe
     """
     d = A.shape[1]
     points = []
-    
-    for _ in range(n_points * 10):  # on essaie plus de points pour en trouver assez
-        x = np.random.uniform(-2, 2, size=d)
+
+    for _ in range(n_points * 10):  # plus de tentatives pour compenser la faible densité en haute dimension
+        x = np.random.uniform(-1, 1, size=d)
         if np.all(A @ x <= b):
             points.append(x)
             if len(points) >= n_points:
                 break
 
-    if len(points) < 10:
-        raise ValueError("Pas assez de points trouvés dans le polyèdre pour faire une PCA.")
+    if len(points) < max(10, d):
+        raise ValueError(f"Seulement {len(points)} points trouvés dans le polyèdre, PCA impossible.")
 
     points = np.array(points)
 
-    # Réduction à 2 composantes principales pour visualisation ou analyse
-    pca = PCA(n_components=2)
+    # PCA sur toutes les composantes (complet)
+    pca = PCA(n_components=d)
     pca.fit(points)
 
     return pca.mean_, pca.components_, pca.explained_variance_
