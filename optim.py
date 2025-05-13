@@ -5,22 +5,38 @@ import numpy as np
 from scipy.optimize import linprog
 from sklearn.decomposition import PCA
 
-def compute_principal_axes(A, b):
+def compute_principal_axes(A, b, n_points=5000):
     """
-    Trouve les directions principales du polyèdre en utilisant l'Analyse en Composantes Principales (PCA).
+    Trouve les directions principales du polyèdre défini par Ax <= b 
+    en utilisant l'Analyse en Composantes Principales (PCA).
+
+    Args:
+        A (np.ndarray): Matrice des contraintes (m x d)
+        b (np.ndarray): Vecteur des bornes (m,)
+        n_points (int): Nombre de points à échantillonner
+
+    Returns:
+        tuple: centroïde, composantes principales, variances expliquées
     """
-    # Générer des points à l'intérieur du polyèdre
+    d = A.shape[1]
     points = []
-    for _ in range(5000):  # Échantillonnage
-        x = np.random.uniform(-2, 2, size=(2,))
+    
+    for _ in range(n_points * 10):  # on essaie plus de points pour en trouver assez
+        x = np.random.uniform(-2, 2, size=d)
         if np.all(A @ x <= b):
             points.append(x)
+            if len(points) >= n_points:
+                break
+
+    if len(points) < 10:
+        raise ValueError("Pas assez de points trouvés dans le polyèdre pour faire une PCA.")
 
     points = np.array(points)
 
-    # Appliquer PCA pour obtenir les directions principales
+    # Réduction à 2 composantes principales pour visualisation ou analyse
     pca = PCA(n_components=2)
     pca.fit(points)
+
     return pca.mean_, pca.components_, pca.explained_variance_
 
 def find_interior_point(A, b):
