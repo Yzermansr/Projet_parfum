@@ -15,6 +15,9 @@ class Perfume:
     def __eq__(self, other) -> bool:
         return self.id == other.id
 
+    def __hash__(self):
+        return hash(self.id)
+
     def get_vector(self):
         p = np.zeros(328)
 
@@ -32,13 +35,13 @@ class Perfume:
 
 
 class Comparison:
-    def __init__(self, p1: int, p2: int, vector: np.ndarray):
+    def __init__(self, p1: Perfume, p2: Perfume, vector: np.ndarray):
         self.p1 = p1
         self.p2 = p2
         self.vector = vector
 
     def __str__(self):
-        return f"Perfume {self.p1} > Perfume {self.p2}"
+        return f"Perfume {self.p1.id} > Perfume {self.p2.id}"
 
     def get_vector(self):
         return self.vector
@@ -57,11 +60,11 @@ class ComparisonMatrix:
     def __getitem__(self, index):
         return self.comparisons[index]
 
-def create_comparison(p1: tuple[int, str, str, str] | Perfume, p2: tuple[int, str, str, str] | Perfume) -> Comparison:
+def create_comparison(p1: tuple[int, str, str, str, str] | Perfume, p2: tuple[int, str, str, str, str] | Perfume) -> Comparison:
     if isinstance(p1, tuple):
         p1 = Perfume(p1)
     if isinstance(p2, tuple):
         p2 = Perfume(p2)
 
-    c = Comparison(p1.id, p2.id, p1.get_vector() - p2.get_vector())
+    c = Comparison(p1, p2, p1.get_vector() - p2.get_vector())
     return c

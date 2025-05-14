@@ -28,8 +28,8 @@ def regret(perfumes: list[Perfume], comparison_matrix: ComparisonMatrix, j: int)
         indice_global = indice if indice < j else indice + 1
 
         # Calcul du vecteur de regret
-        alt = perfumes[indice_global].get_vector()
-        max_wj = alt - pj
+        alt = perfumes[indice_global]
+        max_wj = alt.get_vector() - pj
 
         if first:
             max_w = max_wj
@@ -58,6 +58,7 @@ def min_regret(P: list[Perfume], W: ComparisonMatrix, vectors=True):
             Parfum_A = a
             Parfum_B = P[j]
             poids = w
+    print(type(Parfum_A), type(Parfum_B))
     if vectors:
         return Parfum_A, Parfum_B, regret_min
     return

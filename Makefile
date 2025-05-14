@@ -12,12 +12,16 @@ run-frontend:
 install-node:
 	npm install
 
+# Installer les bibliothèques python
+install-python:
+	pip install -r requirements.txt
+
 # Lancer le serveur Node.js (Express)
 run-node:
 	node server.js
 
 # Tout installer
-install-all: install-node
+install-all: install-node install-python
 
 # Tout lancer (frontend + backend)
 run-all:

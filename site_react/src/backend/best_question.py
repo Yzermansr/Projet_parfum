@@ -1,9 +1,35 @@
+from itertools import combinations
+from concurrent.futures import ProcessPoolExecutor
+
 import numpy as np
 
-from d_criterion import d_criterion_best_question_power
 from min_regret import min_regret, min_regret_2
-from auto import get_perfumes_from_constraint
+from comparison import ComparisonMatrix, Comparison, Perfume, create_comparison
 
+def evaluate_pair(args):
+    i, j, ellipsis_axis, center = args
+    comp = create_comparison(i, j)
+    vect = comp.get_vector()
+    distance, scal = fitness(ellipsis_axis, center, vect)
+    total = distance + scal
+    return total, vect, i, j
+
+def get_question_d_criterion_1_parallel(ellipsis_axis, center, W: ComparisonMatrix, b):
+    perfumes = {c.p1 for c in W} | {c.p2 for c in W}
+    all_pairs = list(combinations(perfumes, 2))
+    args = [(i, j, ellipsis_axis, center) for i, j in all_pairs]
+
+    best = None
+
+    with ProcessPoolExecutor() as executor:
+        for result in executor.map(evaluate_pair, args):
+            total, vect, i, j = result
+            if best is None or total < best[0]:
+                best = (total, vect, i, j)
+
+    if best:
+        return best[1], best[2], best[3]
+    return None, None, None
 
 def fitness(ellipsis_axis, center, vector) -> tuple[int, int]:
     # TODO: trouver le vrai nom de ce système
@@ -20,59 +46,40 @@ def fitness(ellipsis_axis, center, vector) -> tuple[int, int]:
         colinearity of the vector to the axis
     """
 
-    # distance to centroid
-    num = 0
-    for i in range(vector.shape[0] - 1):
-        num += vector[i] * center[i]
-    num += vector[-1]
-    num = np.abs(num)
+    # Distance au centre du polyèdre (projection de center sur vector)
+    # print('ici')
+    min_scalar = np.inf
+    distance = np.abs(np.dot(vector, center) + vector[-1]) / np.linalg.norm(vector)
 
-    denom = np.linalg.norm(vector)
-    distance = num / denom
+    # Colinéarité minimale entre le vecteur testé et les axes principaux
+    v_unit = vector / np.linalg.norm(vector)
 
-    # colinearity
-    # make unit vectors
-    v1 = vector / np.linalg.norm(vector)
-    min_scal = 100
-    for axis in ellipsis_axis:
-        unit = axis / np.linalg.norm(axis)
-        scal = np.dot(v1, unit)
-        if scal < min_scal:
-            min_scal = scal
+    scal = np.abs(0.5 - np.dot(v_unit, ellipsis_axis[0] / np.linalg.norm(ellipsis_axis[0])))
+    if min_scalar > scal:
+        min_scalar = scal
 
-    return distance, scal
+    return distance, min_scalar
 
-def get_question_d_criterion_1(ellipsis_axis, center, W, b):
-    # parcourir toutes les questions possibles et trouver celle avec le meilleur score de fitness
-    d = center.shape
+def get_question_d_criterion_1(ellipsis_axis, center, W: ComparisonMatrix, b):
+    perfumes = {c.p1 for c in W} | {c.p2 for c in W}  # set de tous les parfums comparés
+    print(len(perfumes))
+    best_score = float("inf")
     best_vector = None
-    # best_vector_PCA = None
-    best_score = 10000000
-    # best_score_PCA = 10000000
-    # d-criterion (d-error criterion) pour comparer la manière dont notre polyèdre diminue par rapport aux questions aléatoires
+    best_A = None
+    best_B = None
 
-    # TODO: GROS PROBLÈME, ON PARCOURT QUE LES QUESTIONS DÉJÀ POSÉES
-    # TODO: JVAIS BOSSER DESSUS
-    l, c = W.get_matrix().shape
-    for i in range(l):
-        dist_score, col_score = fitness(ellipsis_axis, center, W[i].get_vector())
-        total_score = dist_score + col_score
-        # print(f"score de {i} : {total_score}")
-        if total_score < best_score:
-            best_score = total_score
-            best_comparison = W[i]
+    for i, j in combinations(perfumes, 2):
+        comp = create_comparison(i, j)
+        vect = comp.get_vector()
+        distance, scal = fitness(ellipsis_axis, center, vect)
+        total = distance + scal
+        if total < best_score:
+            best_score = total
+            best_vector = vect
+            best_A = i
+            best_B = j
 
-    n = 0
-
-    # TODO: ça marche plus
-    for j in W.get_matrix()[best_vector, :]:
-        n = n + 1
-        if (j == 1):
-            value1 = n
-        if (j == -1):
-            value2 = n
-
-    return best_vector, value1, value2
+    return best_vector, best_A, best_B
 
 def get_best_question(ellipsis_axis, center, W, b, P):
     """
@@ -92,11 +99,11 @@ def get_best_question(ellipsis_axis, center, W, b, P):
     best_vector, dc1p1, dc1p2 = get_question_d_criterion_1(ellipsis_axis, center, W, b)
 
     # pair, _ = d_criterion_best_question_power(W, b)
-    pa, pb, r = min_regret(P, W)
+    # pa, pb, r = min_regret(P, W)
     #p1, p2, r1 = min_regret_2(P, W)
-    print(f"Best question Victor Pez : {dc1p1}, {dc1p2} (comparaison : {best_vector}, ids ? : {get_perfumes_from_constraint(best_vector)})")
+    print(f"Best question Victor Pez : {dc1p1}, {dc1p2}")
     # print(f"Best question Soupramagoat : {pair[0]}, {pair[1]}")
-    print(f"Best question Yzermans : {pa}, {pb}, regret : {np.linalg.norm(r)}")
+    # print(f"Best question Yzermans : {pa}, {pb}, regret : {np.linalg.norm(r)}")
     #print(f"Best question Victor Pez Le Retour: {p1}, {p2}, regret : {r1}")
     return "aaa"
 
