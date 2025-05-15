@@ -116,7 +116,7 @@ def barrier_function(x, W, b):
     return -torch.sum(torch.log(b - W @ x))
 
 
-def find_analytic_center(W, b, max_iter=500, lr=0.1, verbose=True):
+def find_analytic_center(W, b, max_iter=500, lr=0.0000000000000001, verbose=True):
     """
     Find the analytic center of a polyhedron using barrier method.
 
@@ -130,32 +130,41 @@ def find_analytic_center(W, b, max_iter=500, lr=0.1, verbose=True):
     Returns:
         torch.Tensor: Approximate analytic center
     """
-
+    
+    print("shape =", b.shape)    
+    W2 = np.eye(W.shape[1])
+    W = np.vstack([W,W2,-W2])
+    b = np.hstack([b,np.ones(W.shape[1]),+np.ones(W.shape[1])])
+    print(b)
+    print(W)
     # Initialize x inside the polyhedron
-    x = find_interior_point(W, b)
+    x = find_interior_point(W, b) 
 
     print("Finding analytic center of the polytope...")
     # Verify the initial point is feasible
     margin = b - W @ x
     margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
-
+    
+    x =  torch.tensor(x, requires_grad = True)
+    W = torch.tensor(W, requires_grad = False)
+    b = torch.tensor(b, requires_grad = False)
     # Setup optimizer
-    optimizer = optim.SGD([torch.tensor(x)], lr=lr)
-
+    optimizer = optim.SGD([x], lr=lr)
+    
     # Optimization loop
-    for i in range(max_iter):
+    for i in range(200000):
         optimizer.zero_grad() # reset gradient
-        loss = barrier_function(torch.tensor(x, requires_grad = True), torch.tensor(W, requires_grad = True), torch.tensor(b, requires_grad = True)) # compute loss
+        loss = barrier_function(x, W, b) # compute loss
         loss.backward()
         optimizer.step() # step of gradient descent
 
         # Print progress periodically
         if verbose and i % 100 == 0:
-            print(f"Iteration {i}: x = {x}, loss = {loss.item():.4f}")
+            print(f"Iteration {i}: x = {x.shape}, loss = {loss.item():.4f}")
 
     print("Center found !")
-    return x # detaching the tensor from the current graph
+    return x.detach # detaching the tensor from the current graph
 
 def get_ellipsis_data(hessian, center:torch.Tensor):
     """

@@ -97,7 +97,7 @@ def generate_W():
 
     # building b
     W = ComparisonMatrix(W)
-    b = np.array([10e-2 for _ in range(W.get_matrix().shape[0])])
+    b = np.array([1e-7 for _ in range(W.get_matrix().shape[0])])
 
     return W, b, P
 
