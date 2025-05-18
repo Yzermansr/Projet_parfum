@@ -44,30 +44,23 @@ def compute_principal_axes(W, b, n_points=5000):
 
     return pca.mean_, pca.components_, pca.explained_variance_
 
-def find_interior_point(W, b, tensor: bool = False):
+def find_interior_point(W: np.ndarray, b: np.ndarray, tensor: bool = False):
     """
     Find an interior point of a polyhedron Ax <= b using SciPy's linear programming solver.
 
     Args:
-        A (torch.Tensor or numpy.ndarray): Constraint matrix
-        b (torch.Tensor or numpy.ndarray): Right-hand side vector
+        W (numpy.ndarray): Constraint matrix
+        b (numpy.ndarray): Right-hand side vector
+        tensor (bool): Whether to return a torch.Tensor or a numpy.ndarray. Defaults to False.
 
     Returns:
         torch.Tensor: A point strictly inside the polyhedron
     """
     print("Finding a point inside the polytope...")
+
     # Convert to numpy arrays if needed
-    if isinstance(W, torch.Tensor):
-        W_np = W.detach().numpy()
-    else:
-        W_np = np.array(W)
 
-    if isinstance(b, torch.Tensor):
-        b_np = b.detach().numpy()
-    else:
-        b_np = np.array(b)
-
-    n_dim = W_np.shape[1]
+    n_dim = W.shape[1]
      # Number of dimensions
 
     # Set up the LP: max s subject to Ax + s*1 <= b
@@ -78,11 +71,12 @@ def find_interior_point(W, b, tensor: bool = False):
     c[-1] = -1.0  # The objective is to maximize s
 
     # Augment A with column of ones (for s)
-    W_aug = np.hstack([W_np, np.ones((W_np.shape[0], 1))])
+    W_aug = np.hstack([W, np.ones((W.shape[0], 1))])
+    print(W.shape)
 
     # Solve the LP
-    print(f"b : {b_np.shape}, {W.shape}")
-    result = linprog(c, A_ub=W_aug, b_ub=b_np, method='highs')
+    print(f"b.shape = {b.shape}, W.shape = {W.shape}")
+    result = linprog(c, A_ub=W_aug, b_ub=b, method='highs')
 
     if not result.success:
         raise ValueError(f"Failed to find an interior point: {result.message}")
@@ -101,44 +95,49 @@ def find_interior_point(W, b, tensor: bool = False):
         return torch.tensor(x_sol, dtype=torch.float32)
     return x_sol
 
-def barrier_function(x, W, b):
+def barrier_function(x: torch.Tensor, W: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """
     Logarithmic barrier function for the polyhedron Ax <= b.
 
     Args:
-        x (torch.Tensor): Point to evaluate
-        A (torch.Tensor): Constraint matrix
-        b (torch.Tensor): Right-hand side vector
+        x (np.ndarray): Point to evaluate
+        W (np.ndarray): Constraint matrix
+        b (np.ndarray): Right-hand side vector
 
     Returns:
-        torch.Tensor: Value of the barrier function
+        torch.Tensor : Value of the barrier function
     """
+
     return -torch.sum(torch.log(b - W @ x))
 
 
-def find_analytic_center(W, b, max_iter=500, lr=0.0000000000000001, verbose=True):
+def find_analytic_center(W: np.ndarray, b:np.ndarray, max_iter=1001, lr=0.00000000000001, verbose=True) -> np.ndarray:
     """
     Find the analytic center of a polyhedron using barrier method.
 
     Args:
-        A (torch.Tensor): Constraint matrix
+        W (torch.Tensor): Constraint matrix
         b (torch.Tensor): Right-hand side vector
         max_iter (int): Maximum number of iterations
         lr (float): Learning rate for optimizer
         verbose (bool): Whether to print progress
 
     Returns:
-        torch.Tensor: Approximate analytic center
+        np.ndarray: Approximate analytic center
     """
-    
-    print("shape =", b.shape)    
-    W2 = np.eye(W.shape[1])
-    W = np.vstack([W,W2,-W2])
-    b = np.hstack([b,np.ones(W.shape[1]),+np.ones(W.shape[1])])
-    print(b)
-    print(W)
+    print(f"find_analytical_center : {b.shape}, {W.shape}")
+
+    # W2 = np.eye(W.shape[1])
+    # W = np.vstack([W,W2,-W2])
+    # b = np.hstack([b,np.ones(W.shape[1]),+np.ones(W.shape[1])])
+
+    W = np.vstack([W, -np.ones((1, W.shape[1]))])
+    b = np.hstack([b, 1e-7])  # ε > 0
+
+    print(f"find_analytical_center 2: {b.shape}, {W.shape}")
     # Initialize x inside the polyhedron
-    x = find_interior_point(W, b) 
+    x = find_interior_point(W, b)
+    # x = torch.tensor(x, dtype = torch.float32, requires_grad = True)
 
     print("Finding analytic center of the polytope...")
     # Verify the initial point is feasible
@@ -146,14 +145,14 @@ def find_analytic_center(W, b, max_iter=500, lr=0.0000000000000001, verbose=True
     margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
     
-    x =  torch.tensor(x, requires_grad = True)
-    W = torch.tensor(W, requires_grad = False)
-    b = torch.tensor(b, requires_grad = False)
+    x =  torch.tensor(x, dtype = torch.float32, requires_grad = True)
+    W = torch.tensor(W, dtype = torch.float32, requires_grad = False)
+    b = torch.tensor(b, dtype = torch.float32, requires_grad = False)
     # Setup optimizer
     optimizer = optim.SGD([x], lr=lr)
     
     # Optimization loop
-    for i in range(200000):
+    for i in range(max_iter):
         optimizer.zero_grad() # reset gradient
         loss = barrier_function(x, W, b) # compute loss
         loss.backward()
@@ -164,7 +163,7 @@ def find_analytic_center(W, b, max_iter=500, lr=0.0000000000000001, verbose=True
             print(f"Iteration {i}: x = {x.shape}, loss = {loss.item():.4f}")
 
     print("Center found !")
-    return x.detach # detaching the tensor from the current graph
+    return x.detach().numpy() # detaching the tensor from the current graph
 
 def get_ellipsis_data(hessian, center:torch.Tensor):
     """
@@ -186,13 +185,74 @@ def get_ellipsis_data(hessian, center:torch.Tensor):
     print("Ellipsis computed !")
     return eigenvalues, eigenvectors.numpy(), center
 
-def get_pref_data(W, b):
-    # center
-    center = find_analytic_center(W, b)
 
+
+
+def find_analytic_center_newton(W, b, max_iter=100, tol=1e-6, verbose=True):
+    """
+    Trouve le centre analytique du polyèdre Wx <= b en utilisant la méthode de Newton.
+
+    Args:
+        W (np.ndarray or torch.Tensor): Matrice des contraintes
+        b (np.ndarray or torch.Tensor): Vecteur des bornes
+        max_iter (int): Nombre maximal d'itérations
+        tol (float): Tolérance de convergence (norme du gradient)
+        verbose (bool): Afficher les étapes
+
+    Returns:
+        np.ndarray: Centre analytique trouvé
+    """
+    W = W.detach().numpy() if isinstance(W, torch.Tensor) else np.array(W)
+    b = b.detach().numpy() if isinstance(b, torch.Tensor) else np.array(b)
+
+    # Ajout des bornes explicites x_i ∈ [-1,1]
+    d = W.shape[1]
+    W_ext = np.vstack([W, np.eye(d), -np.eye(d)])
+    b_ext = np.hstack([b, np.ones(d), np.ones(d)])
+
+    # Point initial strictement à l'intérieur
+    x = find_interior_point(W_ext, b_ext)
+
+    for i in range(max_iter):
+        r = 1.0 / (b_ext - W_ext @ x)  # (m,)
+        grad = W_ext.T @ r            # (d,)
+        H = W_ext.T @ np.diag(r**2) @ W_ext  # Hessienne
+
+        # Newton 
+        delta_x = np.linalg.solve(H, grad)
+        decrement = grad @ delta_x
+
+        if verbose and i % 5 == 0:
+            print(f"Iter {i}, ||grad|| = {np.linalg.norm(grad):.2e}, decrement = {decrement:.2e}")
+
+        # Test de convergence
+        if np.linalg.norm(grad) < tol:
+            print("Newton converged.")
+            break
+
+        
+        t = 1.0
+        while True:
+            x_new = x - t * delta_x
+            if np.all(b_ext - W_ext @ x_new > 0):
+                break
+            t *= 0.5
+            if t < 1e-10:
+                raise RuntimeError("Line search failed")
+
+        x = x_new
+
+    return x
+
+
+def get_pref_data(W: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    print(f"Auto : {b.shape}, {W.shape}")
+
+    # center
+    center = find_analytic_center(W, b) # center est un np.ndarray
     # hessian
     print("Computing hessian...")
-    x = torch.tensor(center, dtype=torch.float32)
+    x = center
     W_t = torch.tensor(W, dtype=torch.float32)
     b_t = torch.tensor(b, dtype=torch.float32)
 
@@ -211,18 +271,33 @@ def get_pref_data(W, b):
     # Décomposition spectrale
     eigvals, eigvecs = torch.linalg.eigh(H)
     print("Hessian computed !")
-    return center, eigvecs
+    return center, eigvecs.detach().numpy()
 
-def get_pref_data_2(W, b):
+def get_pref_data2(W: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    print(f"Auto : {b.shape}, {W.shape}")
+
     # center
-    center = find_analytic_center(W, b)
+    center = find_analytic_center_newton(W, b)  # numpy array
+    x = torch.tensor(center, dtype=torch.float32)
 
-    # hessian
+    # Convert constraint matrices to torch
+    W_t = torch.tensor(W, dtype=torch.float32)
+    b_t = torch.tensor(b, dtype=torch.float32)
+
+    # Calcul de la Hessienne analytique H = Aᵀ D A
     print("Computing hessian...")
-    h = hessian(barrier_function, (torch.tensor(center), torch.tensor(W), torch.tensor(b)))
-    Hx = h[0][0]
-    print("Inverting hessian...")
-    h_inv = torch.linalg.inv(Hx)
-    _, eigv, _ = get_ellipsis_data(h_inv, center)
-    return center, eigv
+    r = 1.0 / (b_t - W_t @ x)
+    D = torch.diag(r ** 2)
+    H = W_t.T @ D @ W_t
 
+    # Forcer la symétrie
+    H = 0.5 * (H + H.T)
+
+    # Régulariser
+    epsilon = 1e-6
+    H += epsilon * torch.eye(H.shape[0])
+
+    # Décomposition spectrale
+    eigvals, eigvecs = torch.linalg.eigh(H)
+    print("Hessian computed !")
+    return center, eigvecs.detach().numpy()

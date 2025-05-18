@@ -3,7 +3,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 
-from min_regret import min_regret, min_regret_2
+
 from comparison import ComparisonMatrix, Comparison, Perfume, create_comparison
 
 def evaluate_pair(args):
