@@ -4,7 +4,12 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 
-from comparison import ComparisonMatrix, Comparison, Perfume, create_comparison
+from comparison import ComparisonMatrix, Perfume, create_comparison
+from gradient_descent import get_question_d_criterion_1
+from d_criterion import d_criterion_best_question_power
+from min_regret import min_max_regret
+from optim import get_pref_data, get_pref_data2
+
 
 def evaluate_pair(args):
     i, j, ellipsis_axis, center = args
@@ -31,79 +36,42 @@ def get_question_d_criterion_1_parallel(ellipsis_axis, center, W: ComparisonMatr
         return best[1], best[2], best[3]
     return None, None, None
 
-def fitness(ellipsis_axis, center, vector) -> tuple[int, int]:
-    # TODO: trouver le vrai nom de ce système
+
+
+def get_best_question(method: str, W: ComparisonMatrix, b: np.ndarray, P: list[Perfume]):
     """
-    Calculates two fitness scores between the vector and the axis of the Sonnevend ellipsis.
+    Find the best question using the given method to find the best perfume
 
     Args:
-        ellipsis_axis (numpy.ndarray): Main axis of the Sonnevend ellipsis
-        vector (numpy.ndarray): the tried vector
-        center (numpy.ndarray): the center of the ellipsis
+        method (str): the method to use
+        W (ComparisonMatrix): the comparison matrix
+        b (np.ndarray): the right member
+        P (list[Perfume]): the list of perfumes to compare
 
     Returns:
-        tuple: a score of distance to the polyhedron centroid and a score of
-        colinearity of the vector to the axis
+        tuple[int, int, float]: the perfumes to compare, and the regret
     """
 
-    # Distance au centre du polyèdre (projection de center sur vector)
-    # print('ici')
-    min_scalar = np.inf
-    distance = np.abs(np.dot(vector, center) + vector[-1]) / np.linalg.norm(vector)
+    match method:
+        case "d criterion" | "d-criterion":
+            return d_criterion_best_question_power(W, b)
 
-    # Colinéarité minimale entre le vecteur testé et les axes principaux
-    v_unit = vector / np.linalg.norm(vector)
+        case "min max regret" | "min-max-regret" | "minmax":
+            x, y, _, regret = min_max_regret(P, W)
+            return x, y, regret
 
-    scal = np.abs(0.5 - np.dot(v_unit, ellipsis_axis[0] / np.linalg.norm(ellipsis_axis[0])))
-    if min_scalar > scal:
-        min_scalar = scal
+        case "gradient descent" | "gradient-descent":
+            center, ellipsis_axis = get_pref_data(W.get_matrix(), b)
+            _, x, y = get_question_d_criterion_1(ellipsis_axis, center, W, b)
+            return x, y, -1
 
-    return distance, min_scalar
+        case "newton gradient descent" | "newton descent" | "newton":
+            center_newton, ellipsis_axis = get_pref_data2(W.get_matrix(), b)
+            _, x, y = get_question_d_criterion_1(ellipsis_axis, center_newton, W, b)
+            return x, y, -1
 
-def get_question_d_criterion_1(ellipsis_axis, center, W: ComparisonMatrix, b):
-    perfumes = {c.p1 for c in W} | {c.p2 for c in W}  # set de tous les parfums comparés
-    print(len(perfumes))
-    best_score = float("inf")
-    best_vector = None
-    best_A = None
-    best_B = None
+        case _:
+            raise ValueError(f"Unknown method: {method}")
 
-    for i, j in combinations(perfumes, 2):
-        comp = create_comparison(i, j)
-        vect = comp.get_vector()
-        distance, scal = fitness(ellipsis_axis, center, vect)
-        total = distance + scal
-        if total < best_score:
-            best_score = total
-            best_vector = vect
-            best_A = i
-            best_B = j
-
-    return best_vector, best_A, best_B
-
-def get_best_question(ellipsis_axis, center, W, b, P):
-    """
-        Find the best question (with the highest fitness scores) to find the best perfume
-
-        Args:
-            ellipsis_axis (numpy.ndarray): Main axis of the Sonnevend ellipsis
-            center (numpy.ndarray): the center of the ellipsis
-            W (numpy.ndarray): Constraint matrix
-            b (numpy.ndarray): Right-hand side vector
-            P (numpy.ndarray): Perfumes matrix
-
-        Returns:
-            numpy.ndarray : the best question as a vector
-        """
-    print("Finding the best question...")
-    best_vector, dc1p1, dc1p2 = get_question_d_criterion_1(ellipsis_axis, center, W, b)
-
-    # pair, _ = d_criterion_best_question_power(W, b)
-    # pa, pb, r = min_regret(P, W)
-    #p1, p2, r1 = min_regret_2(P, W)
-    print(f"Best question Victor Pez : {dc1p1}, {dc1p2}")
-    # print(f"Best question Soupramagoat : {pair[0]}, {pair[1]}")
-    # print(f"Best question Yzermans : {pa}, {pb}, regret : {np.linalg.norm(r)}")
-    #print(f"Best question Victor Pez Le Retour: {p1}, {p2}, regret : {r1}")
-    return "aaa"
+    return None
 

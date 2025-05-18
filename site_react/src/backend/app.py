@@ -2,9 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import random
-import numpy as np
-from auto import generate_W  
-from min_regret import min_max_regret
+from auto import generate_W
+from site_react.src.backend.min_regret import min_max_regret
 
 app = Flask(__name__)
 CORS(app)

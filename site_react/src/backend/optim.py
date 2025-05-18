@@ -111,7 +111,7 @@ def barrier_function(x: torch.Tensor, W: torch.Tensor, b: torch.Tensor) -> torch
     return -torch.sum(torch.log(b - W @ x))
 
 
-def find_analytic_center(W: np.ndarray, b:np.ndarray, max_iter=1001, lr=0.00000000000001, verbose=True) -> np.ndarray:
+def find_analytic_center(W: np.ndarray, b: np.ndarray, max_iter=1001, lr=1e-5, verbose=True) -> np.ndarray:
     """
     Find the analytic center of a polyhedron using barrier method.
 
@@ -125,8 +125,6 @@ def find_analytic_center(W: np.ndarray, b:np.ndarray, max_iter=1001, lr=0.000000
     Returns:
         np.ndarray: Approximate analytic center
     """
-    print(f"find_analytical_center : {b.shape}, {W.shape}")
-
     # W2 = np.eye(W.shape[1])
     # W = np.vstack([W,W2,-W2])
     # b = np.hstack([b,np.ones(W.shape[1]),+np.ones(W.shape[1])])
@@ -134,9 +132,9 @@ def find_analytic_center(W: np.ndarray, b:np.ndarray, max_iter=1001, lr=0.000000
     W = np.vstack([W, -np.ones((1, W.shape[1]))])
     b = np.hstack([b, 1e-7])  # ε > 0
 
-    print(f"find_analytical_center 2: {b.shape}, {W.shape}")
     # Initialize x inside the polyhedron
     x = find_interior_point(W, b)
+    print(f"find_center : {x.shape}")
     # x = torch.tensor(x, dtype = torch.float32, requires_grad = True)
 
     print("Finding analytic center of the polytope...")
@@ -144,26 +142,27 @@ def find_analytic_center(W: np.ndarray, b:np.ndarray, max_iter=1001, lr=0.000000
     margin = b - W @ x
     margin = torch.tensor(margin)
     assert torch.all(margin > 0), f"Initial point must be strictly feasible, margins: {margin}"
-    
-    x =  torch.tensor(x, dtype = torch.float32, requires_grad = True)
-    W = torch.tensor(W, dtype = torch.float32, requires_grad = False)
-    b = torch.tensor(b, dtype = torch.float32, requires_grad = False)
+
+    x = torch.tensor(x, dtype=torch.float32, requires_grad=True)
+    W = torch.tensor(W, dtype=torch.float32, requires_grad=False)
+    b = torch.tensor(b, dtype=torch.float32, requires_grad=False)
     # Setup optimizer
     optimizer = optim.SGD([x], lr=lr)
-    
+
     # Optimization loop
     for i in range(max_iter):
-        optimizer.zero_grad() # reset gradient
-        loss = barrier_function(x, W, b) # compute loss
+        optimizer.zero_grad()  # reset gradient
+        loss = barrier_function(x, W, b)  # compute loss
         loss.backward()
-        optimizer.step() # step of gradient descent
+        optimizer.step()  # step of gradient descent
 
         # Print progress periodically
         if verbose and i % 100 == 0:
             print(f"Iteration {i}: x = {x.shape}, loss = {loss.item():.4f}")
 
     print("Center found !")
-    return x.detach().numpy() # detaching the tensor from the current graph
+    print(x.detach().numpy().shape)
+    return x.detach().numpy()  # detaching the tensor from the current graph
 
 def get_ellipsis_data(hessian, center:torch.Tensor):
     """
@@ -188,7 +187,7 @@ def get_ellipsis_data(hessian, center:torch.Tensor):
 
 
 
-def find_analytic_center_newton(W, b, max_iter=100, tol=1e-6, verbose=True):
+def find_analytic_center_newton(W, b, max_iter=1000, tol=1e-6, verbose=True):
     """
     Trouve le centre analytique du polyèdre Wx <= b en utilisant la méthode de Newton.
 
@@ -209,6 +208,9 @@ def find_analytic_center_newton(W, b, max_iter=100, tol=1e-6, verbose=True):
     d = W.shape[1]
     W_ext = np.vstack([W, np.eye(d), -np.eye(d)])
     b_ext = np.hstack([b, np.ones(d), np.ones(d)])
+
+    # W_ext = np.vstack([-np.ones((1, W.shape[1])), W, -np.ones((1, W.shape[1]))])
+    # b_ext = np.hstack([1e-7, b, 1e-7])  # ε > 0
 
     # Point initial strictement à l'intérieur
     x = find_interior_point(W_ext, b_ext)
@@ -252,7 +254,7 @@ def get_pref_data(W: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]
     center = find_analytic_center(W, b) # center est un np.ndarray
     # hessian
     print("Computing hessian...")
-    x = center
+    x = torch.tensor(center, dtype=torch.float32)
     W_t = torch.tensor(W, dtype=torch.float32)
     b_t = torch.tensor(b, dtype=torch.float32)
 

@@ -4,6 +4,7 @@ import numpy as np
 
 from comparison import Perfume, Comparison, create_comparison, ComparisonMatrix
 
+DATABASE = "database_copy.db"
 
 def check_ingredients_unicity() -> None:
     """
@@ -12,7 +13,7 @@ def check_ingredients_unicity() -> None:
     Returns:
         None
     """
-    conn = sqlite3.connect("database")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("""SELECT Id,
                         Tete,
@@ -61,7 +62,7 @@ def generate_W():
         - P: A matrix of vectorized perfumes with shape (m, 327) where `m` is the number of perfumes.
         P is the matrix of p-vectors for every perfume in the comparison database (also see `generate_P`).
     """
-    conn = sqlite3.connect("database")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("""SELECT p1.Id    AS parfum1_id,
                         p1.Nom   AS parfum1_nom,
@@ -143,7 +144,7 @@ def get_perfumes_from_constraint(w: np.ndarray) -> tuple[int, int]:
     -------
     [int, int]: the IDs of the perfumes compared.
     """
-    conn = sqlite3.connect("database")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("""SELECT Id,
                         Tete,
