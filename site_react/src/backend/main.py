@@ -2,6 +2,8 @@ from auto import generate_W
 from best_question import get_best_question
 from mon_min_max import min_regret
 
+import numpy as np
+
 def get_new_question():
     # preferences matrix
     W, b, P = generate_W()
@@ -15,7 +17,7 @@ def get_new_question():
     print(f"Gradient Descent: {res_gd[0]}, {res_gd[1]}")
     print(f"Newton Gradient Descent: {res_nd[0]}, {res_nd[1]}")
     print(f"MinMax Regret: {res_mmr[0]}, {res_mmr[1]}")
-    print(f"Minimum maximum regret value: {res_mmr[2]}")
+    print(f"Minimum maximum regret value: {np.linalg.norm(result)}")
 
     
 
