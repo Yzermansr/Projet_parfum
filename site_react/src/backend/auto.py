@@ -1,4 +1,5 @@
 import sqlite3
+from collections import Counter
 
 import numpy as np
 
@@ -6,47 +7,44 @@ from comparison import Perfume, Comparison, create_comparison, ComparisonMatrix
 
 DATABASE = "database_copy.db"
 
-def check_ingredients_unicity() -> None:
+def generate_P(database: str = DATABASE, k: int = 1, n: int = 5) -> list[Perfume]:
     """
-    Prints the perfumes where an ingredient is present in more than one note.
+    Builds the matrix of perfumes `P`, with all perfumes containing at least k of the
+    n most frequent ingredients.
+
+    Args:
+        database (str): the database to use.
+        k (int): minimal number of frequent ingredients.
+        n (int): number of most frequent ingredients to consider.
 
     Returns:
-        None
+        list[Perfume]: list of perfumes containing the frequent ingredients,.
     """
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("""SELECT Id,
-                        Tete,
-                        Coeur,
-                        Fond
-                 FROM parfums_numerotes;""")
-    data = c.fetchall()
+    conn = sqlite3.connect(database)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, Nom, URL, Tete, Coeur, Fond FROM parfums_numerotes")
+    rows = cursor.fetchall()
     conn.close()
-    data = convert_data(data)
-    for id, t, c, f in data:
-        if len(t & c & f) != 0:
-            print(id)
 
-def convert_data(data: list, constrains: bool = False):
-    res = []
-    if constrains:
-        for id, t, c, f, id1, t1, c1, f1 in data:
-            t_list = set(map(lambda x: int(x), t.split(',')))
-            c_list = set(map(lambda x: int(x), c.split(',')))
-            f_list = set(map(lambda x: int(x), f.split(',')))
-            t1_list = set(map(lambda x: int(x), t1.split(',')))
-            c1_list = set(map(lambda x: int(x), c1.split(',')))
-            f1_list = set(map(lambda x: int(x), f1.split(',')))
-            res.append((id, t_list, c_list, f_list, id1, t1_list, c1_list, f1_list))
+    perfumes = [Perfume(row) for row in rows]
 
-    else:
-        for id, t, c, f in data:
-            t_list = set(map(lambda x: int(x), t.split(',')))
-            c_list = set(map(lambda x: int(x), c.split(',')))
-            f_list = set(map(lambda x: int(x), f.split(',')))
-            res.append((id, t_list, c_list, f_list))
+    # Compter la fréquence des ingrédients
+    all_ingredients = []
+    for p in perfumes:
+        all_ingredients.extend(p.get_ingredients())
 
-    return res
+    top_ingredients = set(
+        ing for ing, _ in Counter(all_ingredients).most_common(n)
+    )
+    print(top_ingredients)
+
+    # Garder les parfums avec au moins k ingrédients communs avec le top
+    filtered_perfumes = [
+        p for p in perfumes
+        if len(p.get_ingredients() & top_ingredients) >= k
+    ]
+
+    return filtered_perfumes
 
 def generate_W():
     """
@@ -65,11 +63,13 @@ def generate_W():
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("""SELECT p1.Id    AS parfum1_id,
+                        p1.URL   AS parfum1_url,
                         p1.Nom   AS parfum1_nom,
                         p1.Tete  AS parfum1_tete,
                         p1.Coeur AS parfum1_coeur,
                         p1.Fond  AS parfum1_fond,
                         p2.Id    AS parfum2_id,
+                        p2.URL   AS parfum2_url,
                         p2.Nom   AS parfum2_nom,
                         p2.Tete  AS parfum2_tete,
                         p2.Coeur AS parfum2_coeur,
@@ -85,14 +85,9 @@ def generate_W():
     # building the constraint matrix W
     # dimensions: l×327
     W = []
-    P = []
-    for id1, n1, t1, c1, f1, id2, n2, t2, c2, f2 in data:
-        x = Perfume((id1, n1, t1, c1, f1))
-        y = Perfume((id2, n2, t2, c2, f2))
-        if not x in P:
-            P.append(x)
-        if not y in P:
-            P.append(y)
+    for id1, url1, n1, t1, c1, f1, id2, url2, n2, t2, c2, f2 in data:
+        x = Perfume((id1, url1, n1, t1, c1, f1))
+        y = Perfume((id2, url2, n2, t2, c2, f2))
         W.append(create_comparison(x, y))
     # print(W[:5])
 
@@ -100,66 +95,4 @@ def generate_W():
     W = ComparisonMatrix(W)
     b = np.array([1e-7 for _ in range(W.get_matrix().shape[0])])
 
-    return W, b, P
-
-
-def generate_P(t: set, c: set, f: set) -> np.ndarray:
-    """
-    Generates an array representing the presence of ingredients in a perfume. Each index represents
-    an ingredient, present if the value is 1.
-
-    Parameters
-    ----------
-    t : set
-        A set containing the top note ingredients of a perfume.
-    c : set
-        A set containing the heart note ingredients of a perfume.
-    f : set
-        A set containing the base note ingredients of a perfume.
-
-    Returns
-    ----------
-    np.ndarray
-        A NumPy array of size 328 with counts of ingredient appearances.
-    """
-    p = np.zeros(328)
-
-    # extract the numbers from the sets
-    ingredients = list(t) + list(c) + list(f)
-
-    # building P
-    for i in ingredients:
-        p[i] += 1
-
-    return p
-
-def get_perfumes_from_constraint(w: np.ndarray) -> tuple[int, int]:
-    """
-    Finds the perfumes compared to create the constraint vector w.
-    Parameters
-    ----------
-    w (np.ndarray): The constraint vector.
-
-    Returns
-    -------
-    [int, int]: the IDs of the perfumes compared.
-    """
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("""SELECT Id,
-                        Tete,
-                        Coeur,
-                        Fond
-                 FROM parfums_numerotes;""")
-    data = c.fetchall()
-    conn.close()
-
-    data = convert_data(data)
-
-    for i, (id, t, c, f) in enumerate(data):
-        for j, (id2, t2, c2, f2) in enumerate(data, i):
-            x = generate_P(t, c, f)
-            y = generate_P(t2, c2, f2)
-            if np.array_equal(x - y, w) or np.array_equal(x - y, -w):
-                return id, id2
-    return -1, -1
+    return W, b

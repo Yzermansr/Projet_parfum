@@ -2,12 +2,13 @@ import numpy as np
 
 
 class Perfume:
-    def __init__(self, data: tuple[int, str, str, str, str]):
+    def __init__(self, data: tuple[int, str, str, str, str, str]):
         self.id = data[0]
         self.nom = data[1]
-        self.tete = set(map(lambda x: int(x), data[2].split(',')))
-        self.coeur = set(map(lambda x: int(x), data[3].split(',')))
-        self.fond = set(map(lambda x: int(x), data[4].split(',')))
+        self.url = data[2]
+        self.tete = set(map(lambda x: int(x), data[3].split(',')))
+        self.coeur = set(map(lambda x: int(x), data[4].split(',')))
+        self.fond = set(map(lambda x: int(x), data[5].split(',')))
 
     def __str__(self):
         return f"Perfume {self.id} - {self.nom}"
@@ -31,7 +32,7 @@ class Perfume:
         return p
 
     def get_ingredients(self):
-        return np.array(list(self.tete) + list(self.coeur) + list(self.fond))
+        return self.tete | self.coeur | self.fond
 
 
 class Comparison:
