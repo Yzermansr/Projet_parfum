@@ -3,7 +3,7 @@ from flask_cors import CORS
 import sqlite3
 import random
 from auto import generate_W
-from site_react.src.backend.min_regret import min_max_regret
+from min_regret import min_max_regret
 
 app = Flask(__name__)
 CORS(app)
