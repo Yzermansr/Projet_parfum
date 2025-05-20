@@ -1,3 +1,5 @@
+import sqlite3
+
 import numpy as np
 
 
@@ -77,8 +79,25 @@ def create_comparison(p1: tuple[int, str, str, str, str] | Perfume,
     c = Comparison(p1, p2, p1.get_vector() - p2.get_vector())
     return c
 
-def perfume_distance(p1: Perfume, p2: Perfume):
+def perfume_distance(p1: Perfume | int, p2: Perfume | int):
+    if isinstance(p1, int):
+        q = "SELECT Id, URL, Nom, Tete, Coeur, Fond FROM parfums_numerotes WHERE Id = ?;"
+        conn = sqlite3.connect("database")
+        c = conn.cursor()
+        c.execute(q,(p1,))
+        data = c.fetchone()
+        conn.close()
+        p1 = Perfume(data)
+    if isinstance(p2, int):
+        q = "SELECT Id, URL, Nom, Tete, Coeur, Fond FROM parfums_numerotes WHERE Id = ?;"
+        conn = sqlite3.connect("database")
+        c = conn.cursor()
+        c.execute(q,(p2,))
+        data = c.fetchone()
+        conn.close()
+        p2 = Perfume(data)
+
     com = p1.tete & p2.tete | p1.coeur & p2.coeur | p1.fond & p2.fond
     dif = p1.tete ^ p2.tete | p1.coeur ^ p2.coeur | p1.fond ^ p2.fond
-    mid_len = len(p1.get_ingredients()+p2.get_ingredients())/2
+    mid_len = len(p1.get_ingredients() | p2.get_ingredients())/2
     return (len(com) - len(dif))/mid_len
