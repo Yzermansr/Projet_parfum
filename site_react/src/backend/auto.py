@@ -3,7 +3,7 @@ from collections import Counter
 
 import numpy as np
 
-from comparison import Perfume, Comparison, create_comparison, ComparisonMatrix
+from comparison import Perfume, create_comparison, ComparisonMatrix
 
 DATABASE = "database_copy.db"
 
@@ -18,7 +18,7 @@ def generate_P(database: str = DATABASE, k: int = 1, n: int = 5) -> list[Perfume
         n (int): number of most frequent ingredients to consider.
 
     Returns:
-        list[Perfume]: list of perfumes containing the frequent ingredients,.
+        list[Perfume]: list of perfumes containing the frequent ingredients.
     """
     conn = sqlite3.connect(database)
     cursor = conn.cursor()

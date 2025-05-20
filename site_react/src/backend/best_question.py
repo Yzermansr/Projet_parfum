@@ -6,7 +6,7 @@ import numpy as np
 
 from comparison import ComparisonMatrix, Perfume, create_comparison
 from gradient_descent import get_question_d_criterion_1
-from d_criterion import d_criterion_best_question_power
+from d_criterion import get_question
 from min_regret import min_max_regret
 from optim import get_pref_data, get_pref_data2
 
@@ -54,7 +54,8 @@ def get_best_question(method: str, W: ComparisonMatrix, b: np.ndarray, P: list[P
 
     match method:
         case "d criterion" | "d-criterion":
-            return d_criterion_best_question_power(W, b)
+            center, ellipsis_axis = get_pref_data2(W.get_matrix(), b)
+            return get_question(center, W, P, b)
 
         case "min max regret" | "min-max-regret" | "minmax":
             x, y, _, regret = min_max_regret(P, W)

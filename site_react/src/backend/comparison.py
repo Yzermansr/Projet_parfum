@@ -47,13 +47,10 @@ class Comparison:
     def get_vector(self):
         return self.vector
 
+
 class ComparisonMatrix:
     def __init__(self, comparisons: list[Comparison]):
         self.comparisons = comparisons
-
-    def get_matrix(self):
-        m = np.array([c.get_vector() for c in self.comparisons])
-        return m
 
     def __iter__(self):
         return iter(self.comparisons)
@@ -61,7 +58,17 @@ class ComparisonMatrix:
     def __getitem__(self, index):
         return self.comparisons[index]
 
-def create_comparison(p1: tuple[int, str, str, str, str] | Perfume, p2: tuple[int, str, str, str, str] | Perfume) -> Comparison:
+    def get_matrix(self):
+        m = np.array([c.get_vector() for c in self.comparisons])
+        return m
+
+    def insert_comparison(self, comparison: Comparison):
+        new = self.comparisons + [comparison]
+        return ComparisonMatrix(new)
+
+
+def create_comparison(p1: tuple[int, str, str, str, str] | Perfume,
+                      p2: tuple[int, str, str, str, str] | Perfume) -> Comparison:
     if isinstance(p1, tuple):
         p1 = Perfume(p1)
     if isinstance(p2, tuple):

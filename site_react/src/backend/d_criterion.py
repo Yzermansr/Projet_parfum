@@ -1,66 +1,56 @@
-import torch
-import numpy as np
-from optim import barrier_function, find_analytic_center
 from itertools import combinations
 
-def hessian_vector_product(f, x, v, W, b, eps=1e-4):
-    """
-    Approximate the Hessian-vector product H(x) @ v using finite differences:
-    H(x) @ v ≈ (∇f(x + εv) - ∇f(x)) / ε
-    """
-    if isinstance(x, np.ndarray):
-        x = torch.tensor(x, dtype=torch.float32)
+import numpy as np
+import torch
 
-    x = x.detach().clone().requires_grad_(True)
-    f_x = f(x, W, b)
-    grad_f = torch.autograd.grad(f_x, x, create_graph=False)[0]
-
-    x_eps = (x + eps * v).detach().clone().requires_grad_(True)
-    f_x_eps = f(x_eps, W, b)
-    grad_f_eps = torch.autograd.grad(f_x_eps, x_eps, create_graph=False)[0]
-
-    return (grad_f_eps - grad_f) / eps
+from comparison import ComparisonMatrix, create_comparison, Perfume
 
 
-def power_iteration_hvp(f, x, W, b, num_iter=50):
-    """
-    Approximate the dominant eigenvector of the Hessian using power iteration.
-    """
+def polyhedron_volume(center, W, b):
+    shape = W.get_matrix().shape[1]
+    x = torch.tensor(center, dtype=torch.float32)
+    W = torch.tensor(W.get_matrix(), dtype=torch.float32)
+    b = torch.tensor(b, dtype=torch.float32)
+
+    # W = torch.cat([W, torch.eye(shape), -torch.eye(shape)])
+    # b = torch.cat([b, torch.ones(shape), torch.ones(shape)])
+
+    r = b - W @ x  # (m)
+    denom = r ** 2
     d = x.shape[0]
-    v = torch.randn(d, dtype=torch.float32)
-    v = v / v.norm()
+    H = torch.zeros((d, d), dtype=x.dtype)
 
-    for _ in range(num_iter):
-        Hv = hessian_vector_product(f, x, v, W, b)
-        v = Hv / Hv.norm()
+    for i in range(W.shape[0]):
+        w_i = W[i].unsqueeze(1)  # (d, 1)
+        H += (w_i @ w_i.T) / denom[i]
 
-    return v
+    # Calcul du déterminant
+    det = torch.linalg.det(H)
+    return H, det
 
+def get_question(center, W: ComparisonMatrix, P: list[Perfume], b: np.ndarray, target_ratio_gap = 0.3):
+    assert np.all(b - W.get_matrix() @ center > 0), "x n'est pas strictement à l'intérieur du polyèdre !"
 
-def d_criterion_best_question_power(W, b, known_pairs=None):
-    center = find_analytic_center(W.get_matrix(), b, verbose=False)
-    W_tensor = torch.tensor(W.get_matrix(), dtype=torch.float32)
-    b_tensor = torch.tensor(b, dtype=torch.float32)
+    # volume of the current polyhedron
+    d, vol = polyhedron_volume(center, W, b)
+    print(f"déterminant : {d.shape}, {torch.allclose(d, torch.diag(torch.diagonal(d)), atol=1e-8)}")
+    print(f"Volume of the current polyhedron: {vol:.4f}")
 
-    v_max = power_iteration_hvp(barrier_function, center, W_tensor, b_tensor).numpy()
+    p1, p2 = None, None
+    nb_iter = 0
 
-    d = W.get_matrix().shape[1]
-    best_score = -1
-    best_pair = None
-    if known_pairs is None:
-        known_pairs = set()
+    b = np.append(b, 1e-7) # add an item to b to match the dimension of W_copy
+    for i, j in combinations(P, 2):
 
-    for i, j in combinations(range(d), 2):
-        if (i, j) in known_pairs or (j, i) in known_pairs:
-            continue
-        direction = np.zeros(d)
-        direction[i] = 1
-        direction[j] = -1
-        direction /= np.linalg.norm(direction)
-        alignment = abs(np.dot(direction, v_max))
-        if alignment > best_score:
-            best_score = alignment
-            best_pair = (i, j)
-        known_pairs.add((i, j))
+        nb_iter += 1
+        new_comp = create_comparison(i, j)
+        W_copy = W.insert_comparison(new_comp)
 
-    return best_pair, best_score
+        _, new_vol = polyhedron_volume(center, W_copy, b)
+        if nb_iter % 100 == 0:
+            print(f"nb iterations : {nb_iter}, ratio : {new_vol/vol}")
+        if np.abs(new_vol/vol - 1/2) < target_ratio_gap:
+            p1, p2 = i, j
+            break
+
+    return p1, p2, nb_iter
