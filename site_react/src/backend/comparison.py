@@ -76,3 +76,9 @@ def create_comparison(p1: tuple[int, str, str, str, str] | Perfume,
 
     c = Comparison(p1, p2, p1.get_vector() - p2.get_vector())
     return c
+
+def perfume_distance(p1: Perfume, p2: Perfume):
+    com = p1.tete & p2.tete | p1.coeur & p2.coeur | p1.fond & p2.fond
+    dif = p1.tete ^ p2.tete | p1.coeur ^ p2.coeur | p1.fond ^ p2.fond
+    mid_len = len(p1.get_ingredients()+p2.get_ingredients())/2
+    return (len(com) - len(dif))/mid_len
