@@ -2,8 +2,11 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import random
-from auto import generate_W
+import numpy as np
+from auto import generate_W ,generate_P
 from min_regret import min_max_regret
+from best_question import get_best_question
+from mon_min_max import min_regret
 
 app = Flask(__name__)
 CORS(app)
@@ -11,8 +14,7 @@ CORS(app)
 DB = "parfums_numerotes.db"
 DB2 = "database"
 
-@app.route("/api/parfum/search")
-@app.route("/api/parfum/search")
+@app.route("/api/2parfum/search/with/newton") 
 def get_random_duel_with_regret():
     try:
         # Connexion à la base
@@ -29,15 +31,11 @@ def get_random_duel_with_regret():
         parfum1, parfum2 = random.sample(rows, 2)
 
         # Calcul du regret actuel
-        W, b, P = generate_W()
-        X_min, Y_max, w_opt, min_max_value = min_max_regret(P, W)
-
-        print("Minimax Regret Solution:")
-        print(f"Alternative with minimal maximum regret: {X_min}")
-        print(f"Worst-case alternative: {Y_max}")
-        print(f"Weight vector producing maximum regret: {w_opt}")
-        print(f"Minimum maximum regret value: {min_max_value}")
-
+        W, b = generate_W()
+        P = generate_P()
+        result = 69
+        print(parfum1)
+        print(parfum2)
         return jsonify({
             "parfumA": {
                 "nom": parfum1[0],
@@ -47,7 +45,7 @@ def get_random_duel_with_regret():
                 "nom": parfum2[0],
                 "description": f"Voir plus : {parfum2[1]}"
             },
-            "regret": float(min_max_value)
+            "regret": float(result)
         })
 
     except Exception as e:
@@ -55,6 +53,50 @@ def get_random_duel_with_regret():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/parfum/search")
+def get_regret():
+    try:
+        print(">>> get_regret appelé")
+        W, b = generate_W()
+        print(">>> generate_W terminé")
+        P = generate_P()
+        print(">>> generate_P terminé")
+
+        print(">>> W =", type(W))
+        print(">>> b =", type(b))
+        print(">>> P =", type(P))
+
+        x, y, _ = get_best_question("newton", W, b, P)
+        print(">>> get_best_question terminé")
+
+        _, _, result = min_regret(P, W)
+        print(">>> min_regret terminé")
+
+        result = np.linalg.norm(result)
+        nom1 = x.nom
+        nom2 = y.nom
+        print(">>> noms récupérés :", nom1, nom2)
+
+        return jsonify({
+            "parfumA": {
+                "nom": nom1,
+                "description": f"Voir plus : {nom1}"
+            },
+            "parfumB": {
+                "nom": nom2,
+                "description": f"Voir plus : {nom2}"
+            },
+            "regret": float(result)
+        })
+
+    except Exception as e:
+        print("Erreur dans /api/parfum/search :", e)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/api/response", methods=["POST"])
