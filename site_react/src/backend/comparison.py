@@ -4,8 +4,8 @@ import numpy as np
 class Perfume:
     def __init__(self, data: tuple[int, str, str, str, str, str]):
         self.id = data[0]
-        self.nom = data[1]
-        self.url = data[2]
+        self.nom = data[2]
+        self.url = data[1]
         self.tete = set(map(lambda x: int(x), data[3].split(',')))
         self.coeur = set(map(lambda x: int(x), data[4].split(',')))
         self.fond = set(map(lambda x: int(x), data[5].split(',')))

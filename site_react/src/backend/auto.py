@@ -5,9 +5,9 @@ import numpy as np
 
 from comparison import Perfume, Comparison, create_comparison, ComparisonMatrix
 
-DATABASE = "database_copy.db"
+DATABASE = "database"
 
-def generate_P(database: str = DATABASE, k: int = 1, n: int = 5) -> list[Perfume]:
+def generate_P(database: str = DATABASE, k: int = 1, n: int = 2) -> list[Perfume]:
     """
     Builds the matrix of perfumes `P`, with all perfumes containing at least k of the
     n most frequent ingredients.
@@ -22,7 +22,7 @@ def generate_P(database: str = DATABASE, k: int = 1, n: int = 5) -> list[Perfume
     """
     conn = sqlite3.connect(database)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, Nom, URL, Tete, Coeur, Fond FROM parfums_numerotes")
+    cursor.execute("SELECT id, URL,Nom , Tete, Coeur, Fond FROM parfums_numerotes")
     rows = cursor.fetchall()
     conn.close()
 

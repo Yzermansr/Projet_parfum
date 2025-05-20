@@ -67,7 +67,7 @@ def get_best_question(method: str, W: ComparisonMatrix, b: np.ndarray, P: list[P
 
         case "newton gradient descent" | "newton descent" | "newton":
             center_newton, ellipsis_axis = get_pref_data2(W.get_matrix(), b)
-            _, x, y = get_question_d_criterion_1(ellipsis_axis, center_newton, W, b)
+            _, x, y = get_question_d_criterion_1(P,ellipsis_axis, center_newton, W, b)
             return x, y, -1
 
         case _:

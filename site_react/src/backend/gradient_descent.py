@@ -36,15 +36,13 @@ def fitness(ellipsis_axis, center, vector) -> tuple[int, int]:
 
     return distance, min_scalar
 
-def get_question_d_criterion_1(ellipsis_axis, center, W: ComparisonMatrix, b):
-    perfumes = {c.p1 for c in W} | {c.p2 for c in W}  # set de tous les parfums comparés
-    print(len(perfumes))
+def get_question_d_criterion_1(P,ellipsis_axis, center, W: ComparisonMatrix, b):
     best_score = float("inf")
     best_vector = None
     best_A = None
     best_B = None
 
-    for i, j in combinations(perfumes, 2):
+    for i, j in combinations(P, 2):
         comp = create_comparison(i, j)
         vect = comp.get_vector()
         distance, scal = fitness(ellipsis_axis, center, vect)

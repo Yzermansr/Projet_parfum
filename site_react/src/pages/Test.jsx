@@ -11,9 +11,8 @@ const App = () => {
   // Fonction pour récupérer deux parfums aléatoires + regret
   const fetchParfum = async () => {
     try {
-      const res = await fetch("http://localhost:5001/api/parfum/search");
+      const res = await fetch("http://localhost:5001/api/2parfum/search/with/newton");
       const data = await res.json();
-
       setParfum(data.parfumA);
       setParfum2(data.parfumB);
       setRegret(data.regret);
@@ -53,11 +52,11 @@ const App = () => {
     });
     if(round < 5) {
       setRound(round + 1);
-      fetchParfum2();
+      fetchParfum();
     } 
    else if (5 < round < 25) {
       setRound(round + 1);
-      fetchParfum();
+      fetchParfum2();
     } else {
       setRound(26); // Fin
     }
